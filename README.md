@@ -1,6 +1,6 @@
 # System Config Versions
 
-This [ProcessWire](https://processwire.com) plugin adds an admin interface for developers to manage configuration revisions. Think of it as git for PW configurations 😊.
+This [ProcessWire](https://processwire.com) module adds an admin interface for developers to manage configuration revisions. Think of it as git for PW configurations 😊.
 
 It ensures that revisions only get run once. It is possible to run multiple revisions up to a certain point or even all available ones.
 
