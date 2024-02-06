@@ -40,6 +40,6 @@ The Admin GUI is a simple list of all revisions available and some controls to r
 
 ![Admin GUI revisions list](docs/revisions-list.png)
 
-The run button inside the table will run all revisions including the current one, but not the ones below it.
+The run button inside the table will run all revisions up to and including the current one.
 
 The "Run All" button will run all revisions which haven't been run yet.
