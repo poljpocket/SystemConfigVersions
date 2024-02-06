@@ -8,6 +8,7 @@ It ensures that revisions only get run once. It is possible to run multiple revi
 Currently, this plugin is in beta, do not use on production systems!
 
 ### ToDo
+* __URGENT: Greatly improve error handling__
 * Add GitHub Actions support to automatically apply all new versions
 * Add ability to reset run status down to a certain point
 * Revise documentation below
@@ -17,14 +18,14 @@ Currently, this plugin is in beta, do not use on production systems!
 ## Aren't you just copying [RockMigrations](https://processwire.com/modules/rock-migrations/)?
 No. I made this plugin because at work, we needed more precise control over migrations and also do a lot more in migrations than adding&removing structural configurations. Often times, we use small snippets to change field data throughout the process of creating websites. And these may only be run _exactly once_.
 
-**Actually, we are usually using RockMigrations alongside this plugin to accomplish the tasks RM was made for!** Think of this plugin as a way to persist run status for any migrations and ensure any migration only ever gets run once.
+__Actually, we are usually using RockMigrations alongside this plugin to use it's very impressive function set!__ Think of this plugin as a way to persist run status for any migrations and ensure any migration only ever gets run once.
 
 ## Usage
 In your site's `templates` folder, add a new folder called `versions`. This is where your revisions live:
 
 ![revisions list](docs/file-structure.png)
 
-The naming scheme for the revision files is `{version_no}-{file name}.version.php`.
+The naming scheme for the revision files is `{version_no}-{file name}.version.php`. Currently, `version_no` must be `100` - `99999`. Currently `file name` can be anything.
 
 ### Revision file contents
 
