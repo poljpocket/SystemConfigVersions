@@ -9,6 +9,9 @@ class ProcessSystemConfigVersions extends Process {
 
     private const VERSIONS_DIR = 'versions/';
     const FILE_EXTENSION = 'version.php';
+    const FILE_EXTENSION_REGEX = '\.version\.php';
+
+    private WireArray|null $versions = null;
 
     public static function getModuleInfo(): array {
         return [
@@ -63,12 +66,13 @@ class ProcessSystemConfigVersions extends Process {
         /** @var MarkupAdminDataTable $table */
         $table = $this->modules->get("MarkupAdminDataTable");
         $table->setEncodeEntities(false);
+        $table->setSortable(false);
 
         $table->headerRow([
             $this->_('Version No.'),
             $this->_('File Name'),
             $this->_('Run Date'),
-            $this->_('Status'),
+            $this->_('Execute'),
         ]);
 
         foreach ($this->getAvailableVersions() as $version) {
@@ -92,7 +96,7 @@ class ProcessSystemConfigVersions extends Process {
         if ($newVersionsAvailable) {
             /** @var InputfieldButton $button */
             $button = $this->modules->get('InputfieldButton');
-            $button->attr('href', './runAll');
+            $button->attr('href', './run-all/');
             $button->attr('id', 'run_all');
             $button->attr('value', 'Run All');
             $button->icon = 'fast-forward';
@@ -115,57 +119,86 @@ class ProcessSystemConfigVersions extends Process {
     }
 
     public function ___executeRun(): void {
-        $id = $this->input->get('id');
+        $id = $this->input->get('id', 'int');
 
         $versions = $this->getAvailableVersions();
 
-        if (array_key_exists($id, $versions)) {
-            $version = $versions[$id];
+        $versions->filter('status=' . SystemConfigVersion::STATUS_NEW . ",version_no<=$id");
+        $versions->sort('version_no');
 
-            $runResult = $this->files->render($this->config->paths->templates . self::VERSIONS_DIR . $version->filename . '.' . self::FILE_EXTENSION, [], [
-                'throwExceptions' => false,
-            ]);
-
-            if ($runResult !== false) {
-                $statement = $this->database->prepare("INSERT INTO " . self::TABLE_NAME . " (version_no, filename) VALUES (:vn, :fn)");
-                $statement->bindValue('vn', $version->version_no, PDO::PARAM_INT);
-                $statement->bindValue('fn', $version->filename);
-                $statement->execute();
-            }
-        }
+        $this->runVersions($versions);
 
         $this->session->redirect('../', false);
     }
 
-    /**
-     * @return SystemConfigVersion[]
-     */
-    public function getAvailableVersions(): array {
-        $versions = [];
+    public function ___executeRunAll(): void {
+        $versions = $this->getAvailableVersions();
 
-        $databaseVersions = $this->database->query("SELECT * FROM " . self::TABLE_NAME . " ORDER BY version_no");
-        foreach ($databaseVersions as $databaseVersion) {
-            /** @var SystemConfigVersion $newVersion */
-            $newVersion = $this->wire(new SystemConfigVersion());
-            $versions[$databaseVersion['version_no']] = $newVersion->setFromDatabase($databaseVersion);
+        $this->runVersions($versions);
+
+        $this->session->redirect('../', false);
+    }
+
+    public function runVersions(WireArray $versionsArray): void {
+        $versionsArray->filter('status=' . SystemConfigVersion::STATUS_NEW);
+        $versionsArray->sort('version_no');
+
+        // run them in order
+        foreach ($versionsArray as $version) {
+            /** @var SystemConfigVersion $version */
+            if ($this->runVersion($version)) {
+                $this->notices->add(new NoticeMessage("Successfully applied version $version->version_no."));
+            } else {
+                $this->notices->add(new NoticeError("Version $version->version_no failed to run; aborting run-all command."));
+                break;
+            }
         }
+    }
 
-        $filesystemVersions = $this->files->find($this->config->paths->templates . self::VERSIONS_DIR, [
-            'recursive' => false,
-            'extensions' => self::FILE_EXTENSION,
-            'returnRelative' => true,
+    public function runVersion(SystemConfigVersion $version): bool {
+        $runResult = $this->files->render($this->config->paths->templates . self::VERSIONS_DIR . $version->version_no . '-' . $version->filename . '.' . self::FILE_EXTENSION, [], [
+            'throwExceptions' => false,
         ]);
 
-        foreach ($filesystemVersions as $filesystemVersion) {
-            if (preg_match('/^((\d{4,5})-[^.]+)\.version\.php$/', $filesystemVersion, $matches)) {
-                if (!array_key_exists($matches[2], $versions)) {
-                    /** @var SystemConfigVersion $newVersion */
-                    $newVersion = $this->wire(new SystemConfigVersion());
-                    $versions[$matches[2]] = $newVersion->setFromFile($matches[2], $matches[1]);
+        if ($runResult !== false) {
+            $statement = $this->database->prepare("INSERT INTO " . self::TABLE_NAME . " (version_no, filename) VALUES (:vn, :fn)");
+            $statement->bindValue('vn', $version->version_no, PDO::PARAM_INT);
+            $statement->bindValue('fn', $version->filename);
+            return $statement->execute();
+        }
+
+        return false;
+    }
+
+    public function getAvailableVersions(): WireArray {
+        if (!$this->versions) {
+            $this->versions = $this->wire(new WireArray());
+
+            $databaseVersions = $this->database->query("SELECT * FROM " . self::TABLE_NAME . " ORDER BY version_no");
+
+            foreach ($databaseVersions as $databaseVersion) {
+                /** @var SystemConfigVersion $newVersion */
+                $newVersion = $this->wire(new SystemConfigVersion());
+                $this->versions->set($databaseVersion['version_no'], $newVersion->setFromDatabase($databaseVersion));
+            }
+
+            $filesystemVersions = $this->files->find($this->config->paths->templates . self::VERSIONS_DIR, [
+                'recursive' => false,
+                'extensions' => self::FILE_EXTENSION,
+                'returnRelative' => true,
+            ]);
+
+            foreach ($filesystemVersions as $filesystemVersion) {
+                if (preg_match('/^((\d{3,5})-([^.]+))' . self::FILE_EXTENSION_REGEX . '$/', $filesystemVersion, $matches)) {
+                    if (!$this->versions->has($matches[2])) {
+                        /** @var SystemConfigVersion $newVersion */
+                        $newVersion = $this->wire(new SystemConfigVersion());
+                        $this->versions->set($matches[2], $newVersion->setFromFile($matches[2], $matches[3]));
+                    }
                 }
             }
         }
 
-        return $versions;
+        return clone $this->versions;
     }
 }
